@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VIGÍA EDO · Simulador de contagios (Heun vs RK4)</title>
+<style>
+:root{font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;color:#e8f3f5;background:#07141d;--ac:#4fe0bd;--mut:#b9ced4}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(ellipse at top right,#123e4b 0%,#07141d 48%);min-height:100vh}
+header,main{max-width:1180px;margin:auto;padding:24px 22px}
+main{padding-top:10px;padding-bottom:65px}
+.brand{font-weight:900;font-size:24px;letter-spacing:2px}.brand span{color:var(--ac)}
+h1{font-size:clamp(29px,5vw,51px);letter-spacing:-1.8px;line-height:1.08;margin:16px 0}h1 span{color:var(--ac)}
+h2{font-size:23px;margin:0 0 14px}h3{margin:0 0 12px}
+p,li{line-height:1.7;color:var(--mut)}
+.intro{max-width:760px}
+.eyebrow{color:var(--ac);font-size:12px;letter-spacing:2px;text-transform:uppercase;font-weight:800}
+.tabs{display:flex;gap:9px;overflow:auto;margin:30px 0 22px;padding-bottom:5px}
+.tab{background:#132b35;border:1px solid #31505b;color:#c2d4d9;padding:12px 18px;border-radius:12px;white-space:nowrap;cursor:pointer;font-weight:700;font:inherit;font-weight:700}
+.tab.active{background:#3cd6b1;color:#06251f;border-color:#3cd6b1}
+.tab:focus-visible,input:focus-visible,.btn:focus-visible{outline:3px solid #ffbd6a;outline-offset:2px}
+.panel{display:none}.panel.active{display:block}
+.card{background:#102631;border:1px solid #2b4854;border-radius:18px;padding:24px;margin-bottom:18px}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-bottom:18px}
+.metric{background:#0a1c25;padding:17px;border-radius:14px;border:1px solid #264550}
+.metric small{color:#9bb8c1;display:block}
+.metric strong{font-size:25px;color:#58e6c3;display:block;margin-top:8px}
+.metric strong.sm{font-size:19px}
+.math{padding:15px 18px;border-radius:12px;background:#081b23;color:#9df5dc;font-size:clamp(14px,2vw,20px);overflow:auto;font-family:Georgia,serif;margin-bottom:12px}
+.form{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+label{display:block;color:#b5cbd2;font-size:13px;font-weight:700}
+input{display:block;width:100%;padding:12px;background:#081b24;border:1px solid #375561;color:#f1fbfd;border-radius:9px;margin-top:7px;font-size:16px}
+.btn{border:0;border-radius:10px;background:var(--ac);color:#06251f;padding:13px 19px;font-weight:800;cursor:pointer;margin:12px 8px 0 0;font-size:15px}
+.btn.alt{background:#24414c;color:#e5f5f5}
+.note{font-size:13px;color:#9bb7c0}
+.error{color:#ffb6b6;font-weight:700;margin-top:10px}
+.ok{color:#9df5dc}
+table{width:100%;border-collapse:collapse;font-size:13px;white-space:nowrap}
+th,td{padding:10px 12px;text-align:right;border-bottom:1px solid #2a4752}
+th:first-child,td:first-child{text-align:left}
+th{color:#67e6c5;background:#0a2029;position:sticky;top:0}
+.tablewrap{max-height:420px;overflow:auto;border-radius:12px;border:1px solid #2b4854}
+canvas{width:100%;height:350px;display:block;background:#081b24;border-radius:12px}
+.legend{display:flex;gap:20px;flex-wrap:wrap;font-size:13px;color:#c4d8dd;margin-top:12px}
+.dot{width:11px;height:11px;display:inline-block;border-radius:50%;margin-right:6px}
+.footer{text-align:center;color:#849fa8;padding:20px;font-size:12px}
+@media(max-width:720px){.grid,.grid3,.form{grid-template-columns:1fr}.card{padding:18px}canvas{height:270px}}
+@media print{.tabs,.btn{display:none}.panel{display:block!important}body{background:#fff}}
+</style>
+</head>
+<body>
+<header><div class="brand">✚ VIGÍA<span>EDO</span></div></header>
+<main>
+<div class="eyebrow">Desafío individual · Salud preventiva</div>
+<h1>Comprender los contagios.<br><span>Simular para prevenir.</span></h1>
+<p class="intro">Laboratorio educativo de modelado epidemiológico. Compara la solución analítica con los métodos de Heun y Runge-Kutta de cuarto orden, mide su error, estudia su convergencia y explora escenarios hipotéticos de prevención.</p>
+<nav class="tabs" role="tablist" aria-label="Secciones">
+<button class="tab active" role="tab" data-tab="contexto">1 · Problema</button>
+<button class="tab" role="tab" data-tab="modelo">2 · Modelo y solución</button>
+<button class="tab" role="tab" data-tab="simulador">3 · Simulador</button>
+<button class="tab" role="tab" data-tab="resultados">4 · Resultados</button>
+</nav>
+
+<section class="panel active" id="contexto">
+<div class="grid">
+<article class="card"><div class="eyebrow">El desafío</div><h2>Influenza en una comunidad educativa</h2>
+<p>En una institución con 500 estudiantes, una enfermedad respiratoria contagiosa afecta la asistencia y el aprendizaje. <strong>Pregunta:</strong> ¿cuántos contagios acumulados habrá al día 20 si la tasa de crecimiento baja de r = 0,30 a r = 0,18 día⁻¹ (reducción del 40 %)?</p>
+<p><strong>Meta cuantificable:</strong> estimar la diferencia de contagios acumulados al día 20 entre ambos escenarios y comprobar qué método numérico la calcula con menor error.</p></article>
+<article class="card"><div class="eyebrow">Valor de Ingeniería de Sistemas</div><h2>Una herramienta de análisis</h2>
+<p>El sistema integra una EDO, algoritmos numéricos, validación de datos, visualización, estudio de convergencia y análisis de errores.</p>
+<p>Los parámetros son hipotéticos, no están calibrados con datos reales y no sustituyen la vigilancia epidemiológica ni el consejo sanitario.</p></article>
+</div>
+<div class="card"><h2>Medidas preventivas de salud pública</h2>
+<div class="grid3" style="margin:0">
+<div class="metric"><strong class="sm">Ventilación</strong><p>Renovar el aire en espacios compartidos.</p></div>
+<div class="metric"><strong class="sm">Higiene</strong><p>Lavarse las manos y cubrirse al toser o estornudar.</p></div>
+<div class="metric"><strong class="sm">Protección</strong><p>Vacunarse según recomendaciones locales y no asistir enfermo.</p></div>
+</div></div>
+</section>
+
+<section class="panel" id="modelo">
+<div class="card"><div class="eyebrow">Modelo logístico educativo</div><h2>EDO de primer orden con condición inicial</h2>
+<div class="math">dI/dt = r · I · (1 − I/K) &nbsp;;&nbsp; I(0) = I₀</div>
+<p><strong>I(t)</strong>: contagios acumulados (personas) · <strong>t</strong>: tiempo (días) · <strong>r</strong>: tasa de crecimiento hipotética (día⁻¹) · <strong>K</strong>: máximo de contagios acumulados (personas) · <strong>I₀</strong>: contagios iniciales (personas).</p>
+<h3>Solución analítica (separación de variables)</h3>
+<div class="math">∫ dI / [I(1 − I/K)] = ∫ r dt ⟹ ln|I/(K − I)| = rt + C<br>I(t) = K / [1 + ((K − I₀)/I₀) · e^(−rt)]</div>
+<h3>Verificación por sustitución</h3>
+<p>Al derivar I(t) resulta I′(t) = r·I(t)·(1 − I(t)/K), y en t = 0 se obtiene I(0) = I₀. Comprobación numérica con los valores actuales:</p>
+<div class="math" id="verif">Ejecuta una simulación para ver la comprobación.</div>
+<h3>Puntos clave del modelo</h3>
+<p>Punto de inflexión (mayor ritmo de contagio): t* = ln((K − I₀)/I₀)/r, con I(t*) = K/2 y ritmo máximo r·K/4 personas/día.</p></div>
+<div class="grid">
+<div class="card"><h3>Heun (orden 2)</h3><div class="math">k₁ = f(tₙ, Iₙ)<br>k₂ = f(tₙ+h, Iₙ+h·k₁)<br>Iₙ₊₁ = Iₙ + h(k₁+k₂)/2</div><p>Promedia la pendiente inicial y la pendiente estimada al final del paso. Error global ∝ h².</p></div>
+<div class="card"><h3>Runge-Kutta clásico (orden 4)</h3><div class="math">k₁=f(tₙ,Iₙ) · k₂=f(tₙ+h/2,Iₙ+h·k₁/2)<br>k₃=f(tₙ+h/2,Iₙ+h·k₂/2) · k₄=f(tₙ+h,Iₙ+h·k₃)<br>Iₙ₊₁=Iₙ+h(k₁+2k₂+2k₃+k₄)/6</div><p>Combina cuatro pendientes. Error global ∝ h⁴.</p></div>
+</div>
+<div class="card"><h3>Supuestos y límites</h3><p>Población cerrada, parámetros constantes, crecimiento logístico y contagios acumulados continuos (pueden ser decimales). No distingue susceptibles, infectados activos ni recuperados, y r no es una probabilidad de transmisión. Los parámetros son ilustrativos.</p></div>
+</section>
+
+<section class="panel" id="simulador">
+<div class="card"><h2>Configurar simulación</h2>
+<div class="form">
+<label>Límite K (personas)<input id="K" type="number" min="2" max="100000" step="1" value="500"></label>
+<label>Contagios iniciales I₀ (personas)<input id="I0" type="number" min="1" step="1" value="5"></label>
+<label>Tasa de crecimiento r (día⁻¹)<input id="r" type="number" min="0.001" max="2" step="0.01" value="0.3"></label>
+<label>Tiempo final T (días)<input id="T" type="number" min="0.5" max="365" step="0.5" value="20"></label>
+<label>Tamaño de paso h (días)<input id="h" type="number" min="0.01" max="10" step="0.1" value="1"></label>
+<label>Reducción preventiva de r (%)<input id="reduction" type="number" min="0" max="95" step="5" value="40"></label>
+</div>
+<button class="btn" id="run">Ejecutar simulación</button><button class="btn alt" id="reset">Restablecer valores</button>
+<div id="validation" role="alert" class="error"></div>
+<p class="note">T debe ser múltiplo exacto de h. El programa compara h, h/2, h/4 y h/8. Todo es hipotético.</p></div>
+<div class="grid3" id="metrics"></div>
+<div class="card"><h2>Solución analítica vs. Heun vs. RK4</h2>
+<canvas id="chart" role="img" aria-label="Contagios acumulados: analítica, Heun y RK4"></canvas>
+<div class="legend"><span><i class="dot" style="background:#4fe0bd"></i>Analítica</span><span><i class="dot" style="background:#ffbd6a"></i>Heun (h)</span><span><i class="dot" style="background:#9b9aff"></i>RK4 (h)</span></div></div>
+<div class="card"><h2>Error absoluto en cada paso (escala logarítmica)</h2>
+<canvas id="errchart" role="img" aria-label="Error absoluto de Heun y RK4 en escala logarítmica"></canvas>
+<div class="legend"><span><i class="dot" style="background:#ffbd6a"></i>Heun</span><span><i class="dot" style="background:#9b9aff"></i>RK4</span></div>
+<p class="note">Eje vertical: 1e−k = 10⁻ᵏ personas. Los errores nulos se muestran en 1e−14.</p></div>
+<div class="card"><h2>Escenario preventivo hipotético</h2>
+<canvas id="scenario" role="img" aria-label="Escenario con tasa original y reducida"></canvas>
+<div class="legend"><span><i class="dot" style="background:#ffbd6a"></i>Tasa original</span><span><i class="dot" style="background:#4fe0bd"></i>Tasa reducida</span></div>
+<p id="scenarioText"></p></div>
+</section>
+
+<section class="panel" id="resultados">
+<div class="card"><h2>Precisión al tiempo final y convergencia</h2>
+<p>Error relativo = |aproximado − exacto| / |exacto| × 100. El orden observado es log₂(e<sub>anterior</sub>/e<sub>actual</sub>) al dividir h entre 2: se espera ≈ 2 en Heun y ≈ 4 en RK4.</p>
+<div class="tablewrap"><table><thead><tr><th>Paso h</th><th>Método</th><th>Valor final</th><th>Error absoluto</th><th>Error relativo (%)</th><th>Orden observado</th></tr></thead><tbody id="comparison"></tbody></table></div></div>
+<div class="card"><h2>Tabla de iteraciones (paso h)</h2>
+<div class="tablewrap"><table><thead><tr><th>n</th><th>t (días)</th><th>Analítica</th><th>Heun</th><th>RK4</th><th>Err. abs. Heun</th><th>Err. abs. RK4</th><th>Err. % Heun</th><th>Err. % RK4</th></tr></thead><tbody id="iterations"></tbody></table></div>
+<button class="btn alt" id="csv">Descargar tabla CSV</button></div>
+<div class="card"><h2>Interpretación y conclusiones</h2><div id="interpretation"></div>
+<p class="note">Un menor error numérico no demuestra que el modelo sea epidemiológicamente correcto. La reducción de r es un supuesto, no la eficacia medida de una intervención.</p></div>
+</section>
+</main>
+<script>
+'use strict';
+const $=id=>document.getElementById(id);let last=null;
+const fmt=(x,n=5)=>Number(x).toLocaleString('es-BO',{minimumFractionDigits:n,maximumFractionDigits:n});
+const DEF={K:500,I0:5,r:0.3,T:20,h:1,reduction:40};
+
+function params(){
+  const p={};for(const k in DEF)p[k]=$(k).value.trim()===''?NaN:+$(k).value;
+  if(Object.values(p).some(v=>!Number.isFinite(v)))throw Error('Todos los parámetros deben ser números válidos.');
+  if(!Number.isInteger(p.K)||p.K<2||p.K>100000)throw Error('K debe ser un entero entre 2 y 100000.');
+  if(!Number.isInteger(p.I0)||p.I0<1||p.I0>=p.K)throw Error('I₀ debe ser entero, al menos 1 y menor que K.');
+  if(p.r<=0||p.r>2)throw Error('r debe estar entre 0 y 2 día⁻¹.');
+  if(p.T<=0||p.T>365)throw Error('T debe estar entre 0 y 365 días.');
+  if(p.h<0.01||p.h>10||p.h>p.T)throw Error('h debe estar entre 0,01 y 10 días y no superar T.');
+  if(p.reduction<0||p.reduction>95)throw Error('La reducción debe estar entre 0 % y 95 %.');
+  const s=p.T/p.h;
+  if(Math.abs(s-Math.round(s))>1e-8)throw Error('T debe ser múltiplo exacto de h (por ejemplo T=20 con h=1 o h=0,5).');
+  if(s>2000)throw Error('Demasiadas iteraciones: aumenta h o reduce T (máximo 2000 pasos).');
+  return p;
+}
+const f=(y,p)=>p.r*y*(1-y/p.K);
+const exact=(t,p)=>p.K/(1+((p.K-p.I0)/p.I0)*Math.exp(-p.r*t));
+function solve(p,h,m){
+  const N=Math.round(p.T/h),a=[{t:0,y:p.I0}];
+  for(let n=0;n<N;n++){
+    const y=a[n].y;let yn;
+    if(m==='heun'){const k1=f(y,p),k2=f(y+h*k1,p);yn=y+h*(k1+k2)/2}
+    else{const k1=f(y,p),k2=f(y+h*k1/2,p),k3=f(y+h*k2/2,p),k4=f(y+h*k3,p);yn=y+h*(k1+2*k2+2*k3+k4)/6}
+    if(!Number.isFinite(yn)||Math.abs(yn)>1e12)throw Error('La simulación se volvió inestable; reduce el tamaño de paso h.');
+    a.push({t:(n+1)*h,y:yn});
+  }
+  return a;
+}
+const errors=(ap,tr)=>({abs:Math.abs(ap-tr),rel:tr!==0?100*Math.abs(ap-tr)/Math.abs(tr):null});
+
+function draw(id,series,o){
+  const cv=$(id),w=cv.clientWidth,H=cv.clientHeight;if(!w)return;
+  const d=window.devicePixelRatio||1;cv.width=Math.round(w*d);cv.height=Math.round(H*d);
+  const c=cv.getContext('2d');c.scale(d,d);
+  const L=60,R=14,T=14,B=48,iw=w-L-R,ih=H-T-B,{x1,y0=0,y1,yf=v=>fmt(v,0),xt='Tiempo (días)',yt=''}=o;
+  c.font='12px system-ui';c.lineWidth=1;
+  for(let j=0;j<=4;j++){
+    const y=T+ih*j/4;c.strokeStyle='#29434e';c.beginPath();c.moveTo(L,y);c.lineTo(w-R,y);c.stroke();
+    c.fillStyle='#a7c3cc';c.textAlign='right';c.fillText(yf(y1-(y1-y0)*j/4),L-6,y+4);
+  }
+  c.textAlign='center';
+  for(let j=0;j<=4;j++)c.fillText(fmt(x1*j/4,1),L+iw*j/4,T+ih+16);
+  c.fillText(xt,L+iw/2,H-6);
+  c.save();c.translate(13,T+ih/2);c.rotate(-Math.PI/2);c.fillText(yt,0,0);c.restore();
+  const X=t=>L+iw*t/x1,Y=v=>T+ih*(1-(v-y0)/(y1-y0));
+  for(const s of series){
+    c.strokeStyle=c.fillStyle=s.color;c.lineWidth=s.marker?1.5:2.5;c.setLineDash(s.dash||[]);
+    c.beginPath();s.data.forEach((q,i)=>i?c.lineTo(X(q.t),Y(q.y)):c.moveTo(X(q.t),Y(q.y)));c.stroke();c.setLineDash([]);
+    if(s.marker&&s.data.length<=61)s.data.forEach(q=>{c.beginPath();c.arc(X(q.t),Y(q.y),3.2,0,7);c.fill()});
+  }
+}
+const dense=(p,n=300)=>Array.from({length:n+1},(_,i)=>({t:p.T*i/n,y:exact(p.T*i/n,p)}));
+
+function orders(rows){ // rows: [{h,heun,rk4}] -> orden observado por método
+  return rows.map((r,i)=>['heun','rk4'].map(m=>{
+    if(!i)return null;
+    const e0=Math.abs(rows[i-1][m].at(-1).y-r.truth),e1=Math.abs(r[m].at(-1).y-r.truth);
+    return e0>1e-13&&e1>1e-13?Math.log2(e0/e1):null;
+  }));
+}
+
+function run(){
+  try{
+    const p=params(),truth=exact(p.T,p);
+    const rows=[1,2,4,8].map(d=>({h:p.h/d,truth,heun:solve(p,p.h/d,'heun'),rk4:solve(p,p.h/d,'rk4')}));
+    const a=rows[0].heun,b=rows[0].rk4,ord=orders(rows);
+    const pr={...p,r:p.r*(1-p.reduction/100)},reduced=exact(p.T,pr);
+    const eH=errors(a.at(-1).y,truth).abs,eR=errors(b.at(-1).y,truth).abs;
+    last={p,a,b};$('validation').textContent='';
+
+    // Verificación numérica de la solución analítica
+    const tm=p.T/2,dt=1e-5,dI=(exact(tm+dt,p)-exact(tm-dt,p))/(2*dt),rhs=f(exact(tm,p),p);
+    $('verif').innerHTML=`I(0) = ${fmt(exact(0,p),6)} = I₀ ✔<br>En t = ${fmt(tm,2)}: I′(t) ≈ ${fmt(dI,6)} y r·I·(1−I/K) = ${fmt(rhs,6)}<br>Diferencia: <span class="ok">${fmt(Math.abs(dI-rhs),8)}</span>`;
+
+    // Métricas
+    const ts=Math.log((p.K-p.I0)/p.I0)/p.r;
+    $('metrics').innerHTML=[
+      ['Contagios exactos (t = T)',fmt(truth,2)],
+      ['Con tasa reducida (t = T)',fmt(reduced,2)],
+      ['Día de mayor ritmo (t*)',ts>0?fmt(ts,2)+' días':'ya superado'],
+      ['Ritmo máximo teórico',fmt(p.r*p.K/4,2)+' pers./día'],
+      ['Error final de Heun',fmt(eH,6)],
+      ['Error final de RK4',fmt(eR,8)]
+    ].map(x=>`<div class="metric"><small>${x[0]}</small><strong>${x[1]}</strong></div>`).join('');
+
+    // Gráficas
+    const de=dense(p);
+    draw('chart',[{data:de,color:'#4fe0bd'},{data:a,color:'#ffbd6a',marker:1,dash:[5,4]},{data:b,color:'#9b9aff',marker:1,dash:[2,4]}],{x1:p.T,y1:p.K,yt:'Contagios acumulados (personas)'});
+    const lg=s=>s.map((q,i)=>({t:q.t,y:Math.log10(Math.max(Math.abs(q.y-exact(q.t,p)),1e-14))}));
+    const eh=lg(a),er=lg(b),all=eh.concat(er).map(q=>q.y);
+    const y0=Math.floor(Math.min(...all)),y1=y0+4*Math.max(1,Math.ceil((Math.ceil(Math.max(...all))-y0)/4));
+    draw('errchart',[{data:eh,color:'#ffbd6a'},{data:er,color:'#9b9aff'}],{x1:p.T,y0,y1,yf:v=>'1e'+Math.round(v),yt:'Error absoluto (personas)'});
+    draw('scenario',[{data:de,color:'#ffbd6a'},{data:dense(pr),color:'#4fe0bd'}],{x1:p.T,y1:p.K,yt:'Contagios acumulados (personas)'});
+    const drop=truth-reduced;
+    $('scenarioText').textContent=`Con una reducción hipotética del ${fmt(p.reduction,0)} % en r (de ${fmt(p.r,2)} a ${fmt(pr.r,3)} día⁻¹), el modelo pasa de ${fmt(truth,2)} a ${fmt(reduced,2)} contagios acumulados al día ${fmt(p.T,1)}: ${fmt(drop,2)} personas menos (${fmt(100*drop/truth,1)} %). No se atribuye esta reducción a una medida sanitaria específica.`;
+
+    // Tabla de convergencia
+    $('comparison').innerHTML=rows.flatMap((r,i)=>[['Heun','heun',0],['RK4','rk4',1]].map(([nm,k,j])=>{
+      const v=r[k].at(-1).y,e=errors(v,truth),o=ord[i][j];
+      return `<tr><td>${fmt(r.h,4)}</td><td>${nm}</td><td>${fmt(v)}</td><td>${fmt(e.abs,9)}</td><td>${fmt(e.rel,9)}%</td><td>${o===null?'—':fmt(o,2)}</td></tr>`;
+    })).join('');
+
+    // Tabla de iteraciones
+    $('iterations').innerHTML=a.map((pt,i)=>{
+      const v=exact(pt.t,p),x=errors(pt.y,v),y=errors(b[i].y,v);
+      return `<tr><td>${i}</td><td>${fmt(pt.t,2)}</td><td>${fmt(v)}</td><td>${fmt(pt.y)}</td><td>${fmt(b[i].y)}</td><td>${fmt(x.abs,7)}</td><td>${fmt(y.abs,7)}</td><td>${x.rel===null?'—':fmt(x.rel,6)}</td><td>${y.rel===null?'—':fmt(y.rel,6)}</td></tr>`;
+    }).join('');
+
+    // Interpretación
+    const better=eH<eR?'Heun':eR<eH?'RK4':'ambos métodos (empate)';
+    const ratio=eH>0&&eR>0?`RK4 es unas ${fmt(eH/eR,1)} veces más preciso que Heun`:'los errores son demasiado pequeños para compararlos';
+    const oH=ord[1][0],oR=ord[1][1];
+    $('interpretation').innerHTML=
+      `<p><strong>Respuesta al desafío:</strong> con ${p.I0} contagios iniciales, K = ${p.K} y r = ${fmt(p.r,2)} día⁻¹, el modelo indica <strong>${fmt(truth,2)}</strong> contagios acumulados al día ${fmt(p.T,1)}. Si r baja un ${fmt(p.reduction,0)} %, serían <strong>${fmt(reduced,2)}</strong>: unas ${fmt(drop,0)} personas menos en este escenario hipotético.</p>`+
+      `<p><strong>Comparación de métodos:</strong> con h = ${fmt(p.h,3)}, <strong>${better}</strong> obtuvo el menor error absoluto (Heun: ${fmt(eH,6)}; RK4: ${fmt(eR,8)}); ${ratio}. Al reducir h a la mitad, el orden observado fue ${oH===null?'—':fmt(oH,2)} en Heun y ${oR===null?'—':fmt(oR,2)} en RK4, coherente con los órdenes teóricos 2 y 4.</p>`+
+      `<p><strong>Limitaciones:</strong> el modelo logístico simplifica la dinámica real y no distingue susceptibles, infectados activos ni recuperados. Las cifras ilustran escenarios matemáticos, no pronósticos.</p>`;
+  }catch(e){$('validation').textContent=e.message}
+}
+
+$('run').onclick=run;
+$('reset').onclick=()=>{for(const k in DEF)$(k).value=DEF[k];run()};
+document.querySelectorAll('input').forEach(i=>i.addEventListener('change',run));
+document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('.tab,.panel').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(x=>x.setAttribute('aria-selected',x===b));
+  b.classList.add('active');$(b.dataset.tab).classList.add('active');run();
+}));
+$('csv').onclick=()=>{
+  if(!last)return;const {p,a,b}=last;
+  const L=['n,t_dias,analitica,heun,rk4,error_abs_heun,error_abs_rk4,error_pct_heun,error_pct_rk4'];
+  a.forEach((pt,i)=>{const v=exact(pt.t,p),x=errors(pt.y,v),y=errors(b[i].y,v);L.push([i,pt.t,v,pt.y,b[i].y,x.abs,y.abs,x.rel??'',y.rel??''].join(','))});
+  const url=URL.createObjectURL(new Blob(['\ufeff'+L.join('\n')],{type:'text/csv;charset=utf-8'})),l=document.createElement('a');
+  l.href=url;l.download='iteraciones_edo.csv';l.click();URL.revokeObjectURL(url);
+};
+let rz;window.addEventListener('resize',()=>{clearTimeout(rz);rz=setTimeout(()=>last&&run(),150)});
+run();
+</script>
+</body>
+</html>
